@@ -1,14 +1,25 @@
 import { ethers } from "hardhat";
 import { Ballot__factory, MyERC20Votes__factory } from "../typechain-types";
+import * as dotenv from 'dotenv';
 import { tokenizaedBallotSol } from "../typechain-types/contracts";
 import { MyERC20Votes } from "../typechain-types/contracts";
-
+dotenv.config();
 const MINT_VALUE  = ethers.utils.parseUnits("10");
 
 async function main() {
     const [deployer, acc1, acc2] = await ethers.getSigners();
-    const ballotcontratFactory = new Ballot__factory(deployer); 
-    const myERC20VotesFactory  = new MyERC20Votes__factory(deployer); 
+
+    const wallet = new ethers.Wallet(process.env.PRIVATE_KEY ?? "");
+    const provider = new ethers.providers.InfuraProvider(
+        "sepolia",
+        process.env.INFURA_API_KEY
+        );
+    const signer = wallet.connect(provider);
+    const balance = await signer.getBalance();
+    console.log(`Balance is ${balance} WEI`);
+
+    const ballotcontratFactory = new Ballot__factory(signer); 
+    const myERC20VotesFactory  = new MyERC20Votes__factory(signer); 
 
     const myERC20VotesContract = await myERC20VotesFactory.deploy();
     await myERC20VotesContract.deployed();
@@ -16,11 +27,11 @@ async function main() {
     const blockNum = myERC20deployRxReceipt.blockNumber;
     console.log(`The ERC20 contract was deployed at address
     ${myERC20VotesContract.address} at the block ${blockNum}\n`);
-
+       
     const Proposals = ['Proposal 1', 'Proposal 2', 'Proposal 3'];
     const proposalNamesBytes32 = Proposals.map((name) => ethers.utils.formatBytes32String(name));
     
-
+    
     //mint token
     const mintTx = await myERC20VotesContract.mint(acc1.address, MINT_VALUE);
     const mintTxReceipt = await mintTx.wait();
@@ -37,9 +48,17 @@ async function main() {
     
     //delpy ballot
     const lastBlock = await ethers.provider.getBlock("latest")
+
+    const gasLimit = await signer.estimateGas(ballotcontratFactory.getDeployTransaction(
+        proposalNamesBytes32,
+        myERC20VotesContract.address,
+        lastBlock.number
+      ));
+      console.log(`Estimated gas needed: ${gasLimit.toString()}`);
     const ballotContract = await ballotcontratFactory.deploy(proposalNamesBytes32,
         myERC20VotesContract.address,
-        lastBlock.number);      
+        lastBlock.number);    
+    await ballotContract.deployed();  
     const deployRxReceipt = await ballotContract.deployTransaction.wait();
     console.log(`The contract was deployed at address
     ${ballotContract.address} at the block ${deployRxReceipt.blockNumber}\n`);
@@ -48,7 +67,7 @@ async function main() {
     console.log(`Account ${acc1.address} has voting power of ${ethers.utils.formatUnits(votingPower2)}`);
     
     //vote
-    const voteTx = await ballotContract.connect(acc1).vote(1,ethers.utils.parseUnits("5"));
+    const voteTx = await ballotContract.connect(acc1).vote(1,ethers.utils.parseUnits("2"));
     await voteTx.wait();
     const votesAfter = await ballotContract.votingPower(acc1.address);
     console.log(`Account ${acc1.address} has voting power of ${ethers.utils.formatUnits(votesAfter)} after vote`);

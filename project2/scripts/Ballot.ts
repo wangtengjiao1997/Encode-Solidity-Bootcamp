@@ -31,7 +31,7 @@ async function main() {
       ));
 
     console.log(`Estimated gas needed: ${gasLimit.toString()}`);
-    return
+   
     const ballotContract = await ballotContractFactory.deploy(
         proposals.map(ethers.utils.formatBytes32String),
         { gasLimit }
